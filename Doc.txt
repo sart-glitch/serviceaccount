@@ -1,0 +1,87 @@
+ https://repost.aws/knowledge-center/eks-troubleshoot-oidc-and-irsa
+ https://docs.aws.amazon.com/eks/latest/userguide/enable-iam-roles-for-service-accounts.html
+ 
+ aws eks describe-cluster --name cluster_name --query "cluster.identity.oidc.issuer" --output text
+ 
+ aws iam list-open-id-connect-providers | grep EXAMPLED539D4633E53DE1B716D3041E
+ if empty result then,
+ eksctl utils associate-iam-oidc-provider --cluster $cluster_name --approve
+===================
+trust-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::123456789101:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/68331437FE8B1FF"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.eks.us-east-1.amazonaws.com/id/68331437FE8B1FF:sub": "system:serviceaccount:default:s3-access-sa",
+          "oidc.eks.us-east-1.amazonaws.com/id/68331437FE8B1FF:aud": "sts.amazonaws.com"
+        }
+      }
+    }
+  ]
+}
+===========================
+s3-full-access-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": "*"
+    }
+  ]
+}
+
+=========================
+serviceaccount.yaml
+-------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: s3-access-sa
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789101:role/YourIAMRoleName1
+	
+Pod.yaml
+--------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: s3-access-pod
+spec:
+  serviceAccountName: s3-access-sa
+  containers:
+  - name: your-container
+    image: nginx:latest
+	
+---------------------------------------------------------------------  
+aws iam create-role \
+  --role-name YourIAMRoleName \
+  --assume-role-policy-document "file://trust-policy.json"
+
+
+aws iam put-role-policy \
+  --role-name YourIAMRoleName1 \
+  --policy-name S3FullAccessPolicy \
+  --policy-document "file://s3-full-access-policy.json"
+  
+  Apply service account and run the pod, update apt and install aws cli in the pod
+  
+  # Update the package list
+sudo apt update
+
+# Install the AWS CLI using the package manager
+sudo apt install -y awscli
+
+  
+
+
+
+
